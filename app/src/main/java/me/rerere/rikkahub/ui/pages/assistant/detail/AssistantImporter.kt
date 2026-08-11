@@ -45,7 +45,6 @@ import me.rerere.rikkahub.data.model.PromptInjection
 import kotlin.uuid.Uuid
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.intOrNull
-import kotlinx.serialization.json.jsonArrayOrNull
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.ui.components.ui.AutoAIIcon
 import me.rerere.rikkahub.ui.context.LocalToaster
@@ -277,7 +276,7 @@ private fun parseCharacterBook(json: kotlinx.serialization.json.JsonObject, card
     val entries = entriesJson.mapNotNull { el ->
         val e = el.jsonObject
         val content = e.primStr("content") ?: e.primStr("text") ?: return@mapNotNull null
-        val keys = e["keys"]?.jsonArrayOrNull()?.mapNotNull { it.jsonPrimitiveOrNull?.contentOrNull } ?: emptyList()
+        val keys = (e["keys"] as? kotlinx.serialization.json.JsonArray)?.mapNotNull { it.jsonPrimitiveOrNull?.contentOrNull } ?: emptyList()
         val posStr = e.primStr("position")
         val position = when {
             posStr == "before_system_prompt" -> InjectionPosition.BEFORE_SYSTEM_PROMPT
