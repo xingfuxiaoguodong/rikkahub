@@ -2,56 +2,6 @@ name: Daily Build
 on:
   push:
     branches: [ master ]
-  schedule:
-    - cron: '0 18 * * *'
-  workflow_dispatch:
-jobs:
-检查过去 24 小时内是否有新提交，没有则跳过构建，避免重复打包
-  check:
-    runs-on: ubuntu-latest
-    outputs:
-      should_build: [Latex]{{ github.event_name }}" = "workflow_dispatch" ] || [ "[Latex]​[Latex]​[Latex]​[Latex]​[Latex]GITHUB_OUTPUT"
-            exit 0
-          fi
-          # 定时触发：仅当过去 24 小时内有新提交才构建
-          if [ -n "[Latex]​[Latex]​[Latex]​[Latex]GITHUB_OUTPUT"
-          else
-            echo "should_build=false" >> "$GITHUB_OUTPUT"
-            echo "过去 24 小时无新提交，跳过构建"
-          fi
-${{ steps.check.outputs.should_build }}
-    steps:
-      - uses: actions/checkout@v4
-      - name: Check for recent commits
-        id: check
-        run: |
-          # 手动触发时无条件构建
-          if [ "$
-  build:
-    needs: check
-    if: needs.check.outputs.should_build == 'true'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write   # 发布 Release 需要写权限
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          submodules: recursive # 拉取子模块
-
-      - name: Set up JDK
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: '17'
-
-      # web 模块的 preBuild 会执行 `pnpm run build` 构建前端，必须准备好 Node + pnpm
-      - name: Set up pnpm
-        uses: pnpm/action-setup@v4
-name: Daily Build
-on:
-  push:
-    branches: [ master ]
   workflow_dispatch:
 jobs:
   build:
