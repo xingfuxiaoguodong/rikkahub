@@ -37,7 +37,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.core.MessageRole
-import me.rerere.rikkahub.data.datastore.PreferencesStore
+import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.InjectionPosition
 import me.rerere.rikkahub.data.model.Lorebook
@@ -46,7 +46,6 @@ import kotlin.uuid.Uuid
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonArrayOrNull
-import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.ui.components.ui.AutoAIIcon
 import me.rerere.rikkahub.ui.context.LocalToaster
@@ -75,7 +74,7 @@ private fun SillyTavernImporter(
 ) {
     val context = LocalContext.current
     val filesManager: FilesManager = koinInject()
-    val preferencesStore: PreferencesStore = koinInject()
+    val preferencesStore: SettingsStore = koinInject()
     val scope = rememberCoroutineScope()
     val toaster = LocalToaster.current
     var isLoading by remember { mutableStateOf(false) }
@@ -261,13 +260,67 @@ private fun parseAssistantFromJson(
 
 // endregion
 
+/* 解析酒馆卡 character_book → Lorebook（V2 数组 / V3 {entries} 对象） */
+private fun kotlinx.serialization.json.JsonObject.primStr(name: String): String? = this[name]?.jsonPrimitiveOrNull?.contentOrNull
+private fun kotlinx.serialization.json.JsonObject.primBool(name: String): Boolean = this[name]?.jsonPrimitiveOrNull?.contentOrNull?.toBoolean() ?: false
+private fun kotlinx.serialization.json.JsonObject.primInt(name: String): Int = this[name]?.jsonPrimitiveOrNull?.contentOrNull?.toIntOrNull() ?: 0
+
+private fun parseCharacterBook(json: kotlinx.serialization.json.JsonObject, cardName: String): Lorebook? {
+    val data = json["data"]?.jsonObject ?: return null
+    val cb = data["character_book"] ?: data["world_book"] ?: return null
+    val entriesJson = when {
+        cb.jsonArrayOrNull() != null -> cb.jsonArrayOrNull()
+        else -> cb.jsonObject?.get("entries")?.jsonArrayOrNull()
+    } ?: return null
+    if (entriesJson.isEmpty()) return null
+
+    val entries = entriesJson.mapNotNull { el ->
+        val e = el.jsonObject
+        val content = e.primStr("content") ?: e.primStr("text") ?: return@mapNotNull null
+        val keys = e["keys"]?.jsonArrayOrNull()?.mapNotNull { it.jsonPrimitiveOrNull?.contentOrNull } ?: emptyList()
+        val posStr = e.primStr("position")
+        val position = when {
+            posStr == "before_system_prompt" -> InjectionPosition.BEFORE_SYSTEM_PROMPT
+            posStr == "top_of_chat" -> InjectionPosition.TOP_OF_CHAT
+            posStr == "bottom_of_chat" -> InjectionPosition.BOTTOM_OF_CHAT
+            posStr == "at_depth" -> InjectionPosition.AT_DEPTH
+            else -> InjectionPosition.AFTER_SYSTEM_PROMPT
+        }
+        val ex = e["extensions"]?.jsonObject
+        val constant = e["constant"]?.jsonPrimitiveOrNull?.booleanOrNull
+            ?: e["constantActive"]?.jsonPrimitiveOrNull?.booleanOrNull
+            ?: ex?.get("constant")?.jsonPrimitiveOrNull?.booleanOrNull
+            ?: false
+        PromptInjection.RegexInjection(
+            id = Uuid.random(),
+            name = e.primStr("name") ?: "",
+            enabled = !(e.primStr("enabled") == "false"),
+            priority = e.primInt("priority").takeIf { it != 0 } ?: e.primInt("insertion_order"),
+            position = position,
+            content = content,
+            injectDepth = e.primInt("injectDepth").takeIf { it != 0 } ?: ex?.primInt("depth") ?: 4,
+            role = if (e.primStr("role") == "assistant") MessageRole.ASSISTANT else MessageRole.USER,
+            keywords = keys,
+            useRegex = e.primBool("useRegex") || ex?.primBool("regex") == true,
+            caseSensitive = e.primBool("caseSensitive") || ex?.primBool("case_sensitive") == true,
+            scanDepth = e.primInt("scanDepth").takeIf { it != 0 } ?: e.primInt("scan_depth").takeIf { it != 0 } ?: 4,
+            constantActive = constant
+        )
+    }
+    if (entries.isEmpty()) return null
+    return Lorebook(
+        name = "$cardName 世界书",
+        entries = entries
+    )
+}
+
 private suspend fun importAssistantFromUri(
     context: Context,
     uri: Uri,
     onImport: (Assistant) -> Unit,
     toaster: ToasterState,
     filesManager: FilesManager,
-    preferencesStore: PreferencesStore,
+    preferencesStore: SettingsStore,
 ) {
     try {
         val mime = withContext(Dispatchers.IO) { filesManager.getFileMimeType(uri) }
