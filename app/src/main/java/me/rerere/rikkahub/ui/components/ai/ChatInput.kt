@@ -98,6 +98,7 @@ import androidx.compose.material3.OutlinedTextField
 import kotlinx.coroutines.launch
 import java.io.File
 import java.io.FileOutputStream
+import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.ai.LocalDreamApi
 import me.rerere.rikkahub.data.datastore.Settings
