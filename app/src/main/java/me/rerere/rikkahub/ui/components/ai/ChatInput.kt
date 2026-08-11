@@ -55,6 +55,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
@@ -72,6 +73,7 @@ import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.DialogProperties
 import com.dokar.sonner.ToastType
 import dev.chrisbanes.haze.HazeState
@@ -90,7 +92,11 @@ import me.rerere.hugeicons.stroke.ArrowUp02
 import me.rerere.hugeicons.stroke.Cancel01
 import me.rerere.hugeicons.stroke.FullScreen
 import me.rerere.hugeicons.stroke.Zap
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.OutlinedTextField
 import me.rerere.rikkahub.R
+import me.rerere.rikkahub.data.ai.LocalDreamApi
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.getCurrentAssistant
 import me.rerere.rikkahub.data.datastore.getCurrentChatModel
@@ -133,6 +139,11 @@ fun ChatInput(
     onLongSendClick: () -> Unit,
 ) {
     val toaster = LocalToaster.current
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val genScope = rememberCoroutineScope()
+    var genDialog by remember { mutableStateOf(false) }
+    var genPrompt by remember { mutableStateOf("") }
+    var genLoading by remember { mutableStateOf(false) }
     val assistant = settings.getCurrentAssistant()
     val hazeTintColor = MaterialTheme.colorScheme.surfaceContainerLow
     val inputHazeStyle = HazeMaterials.thin(containerColor = hazeTintColor)
@@ -300,6 +311,12 @@ fun ChatInput(
 
                         }
 
+                        IconButton(
+                            onClick = { genDialog = true }
+                        ) {
+                            Text("🎨", fontSize = 20.sp)
+                        }
+
                         ActionIconButton(
                             onClick = onMoreClick
                         ) {
@@ -391,6 +408,59 @@ fun ChatInput(
                 }
             }
 
+        }
+
+        if (genDialog) {
+            AlertDialog(
+                onDismissRequest = { if (!genLoading) genDialog = false },
+                title = { Text("🎨 Local Dream 生图") },
+                text = {
+                    Column {
+                        OutlinedTextField(
+                            value = genPrompt,
+                            onValueChange = { genPrompt = it },
+                            placeholder = { Text("输入提示词（留空用默认），或点自动生成") },
+                            enabled = !genLoading,
+                            singleLine = false,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        if (genLoading) {
+                            Text("正在生成…（LocalDream 受控模式需开启）", modifier = Modifier.padding(top = 8.dp))
+                        }
+                    }
+                },
+                confirmButton = {
+                    Row {
+                        TextButton(onClick = { genPrompt = "" }) { Text("清空") }
+                        TextButton(onClick = { genPrompt = "anime style, masterpiece, best quality, beautiful girl" }) { Text("默认") }
+                        Button(
+                            onClick = {
+                                genLoading = true
+                                genScope.launch {
+                                    try {
+                                        val b64 = me.rerere.rikkahub.data.ai.LocalDreamApi.generate(genPrompt.trim().ifEmpty { "anime style, masterpiece, best quality, beautiful girl" })
+                                        val bytes = android.util.Base64.decode(b64, android.util.Base64.DEFAULT)
+                                        val dir = File(context.filesDir, "localdream_gen").apply { mkdirs() }
+                                        val file = File(dir, "gen_" + System.currentTimeMillis() + ".jpg")
+                                        FileOutputStream(file).use { it.write(bytes) }
+                                        state.messageContent = state.messageContent + UIMessagePart.Image(url = android.net.Uri.fromFile(file).toString())
+                                        genDialog = false
+                                        sendMessage()
+                                    } catch (e: Exception) {
+                                        toaster.show(e.message ?: "生图失败", type = ToastType.Error)
+                                    } finally {
+                                        genLoading = false
+                                    }
+                                }
+                            },
+                            enabled = !genLoading
+                        ) { Text(if (genLoading) "生成中…" else "生成") }
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { if (!genLoading) genDialog = false }) { Text("取消") }
+                }
+            )
         }
     }
 }
