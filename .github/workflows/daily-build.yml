@@ -48,44 +48,42 @@ ${{ steps.check.outputs.should_build }}
       # web 模块的 preBuild 会执行 `pnpm run build` 构建前端，必须准备好 Node + pnpm
       - name: Set up pnpm
         uses: pnpm/action-setup@v4
+name: Daily Build
+on:
+  push:
+    branches: [ master ]
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: recursive
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+      - uses: pnpm/action-setup@v4
         with:
           version: 11
-
-      - name: Set up Node
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: pnpm
-          cache-dependency-path: web-ui/pnpm-lock.yaml
-
-      # gradle 的 buildWebUi 任务只跑 build 不跑 install，需在此提前安装依赖
-      - name: Install web-ui dependencies
+      - name: Install web-ui deps
         working-directory: web-ui
         run: pnpm install --frozen-lockfile
-
-      - name: Gradle cache
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
-
-      - name: Gradle Build
+      - name: Build debug APK
         run: |
           chmod +x gradlew
           ./gradlew assembleDebug
-
-      # 把 APK 直接发布为 Prerelease，用户点链接即可下载单个 apk，无需登录、无需解压
-      - name: Publish nightly prerelease
+      - name: Publish APK
         uses: softprops/action-gh-release@v2
-        if: success()
         with:
-          tag_name: nightly            # 固定 tag，每晚覆盖同一个「最新每日构建」
+          tag_name: nightly
           name: Nightly Build
           prerelease: true
-          body: |
-            自动构建（debug 签名，commit `${{ github.sha }}`）
-
-            > ⚠️ 开发版本，可能不稳定，仅供测试。
           files: app/build/outputs/apk/debug/*.apk
