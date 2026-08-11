@@ -268,8 +268,8 @@ private fun parseCharacterBook(json: kotlinx.serialization.json.JsonObject, card
     val data = json["data"]?.jsonObject ?: return null
     val cb = data["character_book"] ?: data["world_book"] ?: return null
     val entriesJson = when {
-        cb.jsonArrayOrNull() != null -> cb.jsonArrayOrNull()
-        else -> cb.jsonObject?.get("entries")?.jsonArrayOrNull()
+        cb is kotlinx.serialization.json.JsonArray -> cb
+        else -> cb.jsonObject?.get("entries") as? kotlinx.serialization.json.JsonArray
     } ?: return null
     if (entriesJson.isEmpty()) return null
 
