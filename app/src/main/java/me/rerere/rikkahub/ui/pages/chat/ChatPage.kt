@@ -28,6 +28,12 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import android.webkit.WebView
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material3.adaptive.currentWindowDpSize
 import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.material3.rememberDrawerState
@@ -175,6 +181,7 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
     }
 
     val chatListState = rememberLazyListState()
+    var hudVisible by remember { mutableStateOf(false) }
     LaunchedEffect(nodeId, conversation.messageNodes.size) {
         if (!vm.chatListInitialized && conversation.messageNodes.isNotEmpty()) {
             if (nodeId != null) {
@@ -189,6 +196,7 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
         }
     }
 
+    Box(modifier = Modifier.fillMaxSize()) {
     when {
         isBigScreen -> {
             PermanentNavigationDrawer(
@@ -256,6 +264,12 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
             }
         }
     }
+        HudOverlay(
+            visible = hudVisible,
+            html = buildHudHtml(setting.getCurrentAssistant()),
+            onClose = { hudVisible = false }
+        )
+    }
 }
 
 @Composable
@@ -317,6 +331,7 @@ private fun ChatPageContent(
                     onClickMenu = {
                         previewMode = !previewMode
                     },
+                    onToggleHud = { hudVisible = !hudVisible },
                     onUpdateTitle = {
                         vm.updateTitle(it)
                     }
@@ -713,6 +728,7 @@ private fun TopBar(
     previewMode: Boolean,
     onClickMenu: () -> Unit,
     onNewChat: () -> Unit,
+    onToggleHud: () -> Unit,
     onUpdateTitle: (String) -> Unit
 ) {
     val scope = rememberCoroutineScope()
@@ -772,6 +788,11 @@ private fun TopBar(
         },
         actions = {
             IconButton(
+                onClick = onToggleHud
+            ) {
+                Text("📊", modifier = Modifier.padding(2.dp))
+            }
+            IconButton(
                 onClick = {
                     onClickMenu()
                 }
@@ -824,4 +845,61 @@ private fun TopBar(
             }
         )
     }
+}
+
+/* ---- HUD 状态栏面板 ---- */
+@Composable
+private fun HudOverlay(visible: Boolean, html: String, onClose: () -> Unit) {
+    if (!visible) return
+    Box(modifier = Modifier.fillMaxSize()) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.45f))
+                .clickable(onClick = onClose)
+        )
+        Box(
+            modifier = Modifier
+                .align(androidx.compose.ui.Alignment.CenterEnd)
+                .fillMaxHeight()
+                .widthIn(max = 260.dp)
+        ) {
+            AndroidView(
+                factory = { ctx ->
+                    WebView(ctx).apply {
+                        settings.javaScriptEnabled = true
+                        setBackgroundColor(android.graphics.Color.parseColor("#1a1a2e"))
+                    }
+                },
+                update = { it.loadDataWithBaseURL(null, html, "text/html", "utf-8", null) }
+            )
+        }
+    }
+}
+
+/* HUD HTML 组装：用户模板（{变量} 占位符替换）或内置默认（动态进度条） */
+private fun buildHudHtml(assistant: me.rerere.rikkahub.data.model.Assistant): String {
+    val tpl = assistant.hudTemplate
+    if (tpl.isBlank()) {
+        return buildString {
+            append("<div style='font-family:sans-serif;padding:12px;color:#eee;background:#1a1a2e;border-radius:12px;min-width:180px'>")
+            append("<div style='font-weight:bold;margin-bottom:8px;font-size:13px'>📊 状态栏</div>")
+            if (assistant.mvuState.isEmpty()) {
+                append("<div style='font-size:12px;color:#888'>暂无数据：AI 回复末尾带状态栏后自动显示</div>")
+            }
+            assistant.mvuState.forEach { (k, v) ->
+                val num = v.toDoubleOrNull()
+                if (num != null) {
+                    val w = num.coerceIn(0.0, 100.0)
+                    append("<div style='margin:6px 0'><span style='font-size:12px'>" + k + "</span><div style='background:#333;border-radius:4px;height:6px;margin-top:3px'><div style='background:#7c9cff;width:" + w + "%;height:100%;border-radius:4px'></div></div></div>")
+                } else {
+                    append("<div style='margin:4px 0;font-size:12px'>" + k + ": " + v + "</div>")
+                }
+            }
+            append("</div>")
+        }
+    }
+    var html = tpl
+    assistant.mvuState.forEach { (k, v) -> html = html.replace("{" + k + "}", v) }
+    return html
 }

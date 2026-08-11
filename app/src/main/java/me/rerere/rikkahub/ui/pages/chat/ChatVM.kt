@@ -99,7 +99,7 @@ class ChatVM(
                         val mvu = parseMvuFromText(last.toText()) ?: return@collectLatest
                         settingsStore.update { s ->
                             s.copy(assistants = s.assistants.map { a ->
-                                if (a.id == conv.assistantId && a.mvuEnabled) a.copy(mvuState = mvu) else a
+                                if (a.id == conv.assistantId) a.copy(mvuState = mvu) else a
                             })
                         }
                     }
