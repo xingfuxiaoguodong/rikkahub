@@ -227,6 +227,7 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
                     errors = errors,
                     onDismissError = { vm.dismissError(it) },
                     onClearAllErrors = { vm.clearAllErrors() },
+                    onToggleHud = { hudVisible = !hudVisible },
                 )
             }
         }
@@ -259,6 +260,7 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
                     errors = errors,
                     onDismissError = { vm.dismissError(it) },
                     onClearAllErrors = { vm.clearAllErrors() },
+                    onToggleHud = { hudVisible = !hudVisible },
                 )
             }
             BackHandler(drawerState.isOpen) {
@@ -291,6 +293,7 @@ private fun ChatPageContent(
     errors: List<ChatError>,
     onDismissError: (Uuid) -> Unit,
     onClearAllErrors: () -> Unit,
+    onToggleHud: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
     val toaster = LocalToaster.current
@@ -333,7 +336,7 @@ private fun ChatPageContent(
                     onClickMenu = {
                         previewMode = !previewMode
                     },
-                    onToggleHud = { hudVisible = !hudVisible },
+                    onToggleHud = onToggleHud,
                     onUpdateTitle = {
                         vm.updateTitle(it)
                     }
