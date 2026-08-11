@@ -102,3 +102,5 @@ If you like this project, please give it a star ⭐
 ## 📄 License
 
 This project is licensed under the [GNU Affero General Public License v3.0](LICENSE) (AGPL-3.0).
+
+> 个人定制版构建（debug 签名）
