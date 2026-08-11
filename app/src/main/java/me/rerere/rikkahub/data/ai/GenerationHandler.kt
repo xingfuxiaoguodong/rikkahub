@@ -383,6 +383,22 @@ class GenerationHandler(
                     appendLine()
                     append(tool.systemPrompt(model, messages))
                 }
+                // MVU 状态栏报数指令
+                if (assistant.mvuEnabled && assistant.mvuDefs.isNotBlank()) {
+                    appendLine()
+                    val defLines = assistant.mvuDefs.lines().filter { it.isNotBlank() }
+                    val names = defLines.mapNotNull { it.split("|").getOrNull(0)?.trim() }.filter { it.isNotEmpty() }
+                    if (names.isNotEmpty()) {
+                        val defs = defLines.joinToString("、") { line ->
+                            val p = line.split("|")
+                            val n = p.getOrNull(0)?.trim().orEmpty()
+                            val init = p.getOrNull(1)?.trim().orEmpty()
+                            "$n（初值 $init，按剧情浮动）"
+                        }
+                        val state = assistant.mvuState.entries.joinToString(" | ") { "${it.key}: ${it.value}" }
+                        appendLine("【状态栏（MVU）】每次回复的末尾必须单独输出一行状态栏，格式：[${names.joinToString(" | ") { "$it: 值" }}]。变量：$defs。根据剧情与对话自然更新数值。当前状态：${state.ifEmpty { "尚未初始化" }}。")
+                    }
+                }
             }
             if (system.isNotBlank()) add(UIMessage.system(prompt = system))
             addAll(messages.limitContext(assistant.contextMessageLimit))

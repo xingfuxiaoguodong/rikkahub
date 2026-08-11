@@ -50,6 +50,10 @@ data class Assistant(
     val enableTimeReminder: Boolean = false,            // 时间间隔提醒注入
     val allowConversationSystemPrompt: Boolean = false, // 允许对话单独重写 system prompt
     val allowConversationPromptInjection: Boolean = false, // 允许对话单独绑定提示词注入
+    val mvuEnabled: Boolean = false,   // MVU 状态栏开关
+    val mvuDefs: String = "",          // MVU 变量定义（每行：名称|初始值）
+    val hudTemplate: String = "",      // HUD 状态栏 HTML 模板（空=未启用）
+    val mvuState: Map<String, String> = emptyMap(), // MVU 当前状态
 )
 
 @Serializable

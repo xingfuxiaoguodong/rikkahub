@@ -88,6 +88,23 @@ class ChatVM(
 
         // 记住对话ID, 方便下次启动恢复
         context.writeStringPreference("lastConversationId", _conversationId.toString())
+
+        // MVU：监听新回复，解析末尾状态栏并更新变量
+        viewModelScope.launch {
+            chatService.getConversationFlow(_conversationId)
+                .distinctUntilChanged()
+                .collectLatest { conv ->
+                    val last = conv.currentMessages().lastOrNull() ?: return@collectLatest
+                    if (last.role == me.rerere.ai.core.MessageRole.ASSISTANT) {
+                        val mvu = parseMvuFromText(last.toText()) ?: return@collectLatest
+                        settingsStore.update { s ->
+                            s.copy(assistants = s.assistants.map { a ->
+                                if (a.id == conv.assistantId && a.mvuEnabled) a.copy(mvuState = mvu) else a
+                            })
+                        }
+                    }
+                }
+        }
     }
 
     override fun onCleared() {
@@ -343,4 +360,34 @@ class ChatVM(
         }
     }
 
+}
+
+
+/* MVU：宽松解析 AI 回复末尾的状态栏标记（[名:值 | 名:值] 或 末尾多行 名: 值） */
+private fun parseMvuFromText(text: String): Map<String, String>? {
+    if (text.isBlank()) return null
+    val map = mutableMapOf<String, String>()
+    var count = 0
+    val bracket = Regex("\\[([^\\]]+)\\]\\s*$").find(text)
+    if (bracket != null) {
+        bracket.groupValues[1].split('|', '｜').forEach { part ->
+            val kv = part.split(':', '：')
+            if (kv.size == 2 && kv[0].isNotBlank() && kv[1].isNotBlank()) {
+                map[kv[0].trim()] = kv[1].trim(); count++
+            }
+        }
+    } else {
+        val lines = text.lines().map { it.trim() }.filter { it.isNotEmpty() }
+        val tail = mutableListOf<String>()
+        for (i in lines.indices.reversed()) {
+            if (Regex("^[^:：]{1,12}[:：].+").matches(lines[i])) tail.add(0, lines[i]) else break
+        }
+        tail.forEach { line ->
+            val kv = line.split(':', '：')
+            if (kv.size == 2 && kv[0].isNotBlank() && kv[1].isNotBlank()) {
+                map[kv[0].trim()] = kv[1].trim(); count++
+            }
+        }
+    }
+    return if (count >= 2) map else null
 }
