@@ -36,6 +36,16 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import me.rerere.ai.ui.UIMessage
+import me.rerere.ai.core.MessageRole
+import me.rerere.rikkahub.data.datastore.PreferencesStore
+import me.rerere.rikkahub.data.model.Assistant
+import me.rerere.rikkahub.data.model.InjectionPosition
+import me.rerere.rikkahub.data.model.Lorebook
+import me.rerere.rikkahub.data.model.PromptInjection
+import kotlin.uuid.Uuid
+import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.intOrNull
+import kotlinx.serialization.json.jsonArrayOrNull
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.ui.components.ui.AutoAIIcon
@@ -65,6 +75,7 @@ private fun SillyTavernImporter(
 ) {
     val context = LocalContext.current
     val filesManager: FilesManager = koinInject()
+    val preferencesStore: PreferencesStore = koinInject()
     val scope = rememberCoroutineScope()
     val toaster = LocalToaster.current
     var isLoading by remember { mutableStateOf(false) }
@@ -83,6 +94,7 @@ private fun SillyTavernImporter(
                             onImport = onImport,
                             toaster = toaster,
                             filesManager = filesManager,
+                            preferencesStore = preferencesStore,
                         )
                     }.onFailure { exception ->
                         exception.printStackTrace()
@@ -109,6 +121,7 @@ private fun SillyTavernImporter(
                             onImport = onImport,
                             toaster = toaster,
                             filesManager = filesManager,
+                            preferencesStore = preferencesStore,
                         )
                     }.onFailure { exception ->
                         exception.printStackTrace()
@@ -254,6 +267,7 @@ private suspend fun importAssistantFromUri(
     onImport: (Assistant) -> Unit,
     toaster: ToasterState,
     filesManager: FilesManager,
+    preferencesStore: PreferencesStore,
 ) {
     try {
         val mime = withContext(Dispatchers.IO) { filesManager.getFileMimeType(uri) }
@@ -279,7 +293,13 @@ private suspend fun importAssistantFromUri(
             }
         }
         val json = Json.parseToJsonElement(jsonString).jsonObject
-        val assistant = parseAssistantFromJson(context = context, json = json, background = backgroundStr)
+        var assistant = parseAssistantFromJson(context = context, json = json, background = backgroundStr)
+        // 自动解析卡内世界书（character_book）→ 创建 Lorebook 并关联到卡
+        val lorebook = parseCharacterBook(json, assistant.name)
+        if (lorebook != null) {
+            preferencesStore.update { s -> s.copy(lorebooks = s.lorebooks + lorebook) }
+            assistant = assistant.copy(lorebookIds = assistant.lorebookIds + lorebook.id)
+        }
         onImport(assistant)
     } catch (exception: Exception) {
         exception.printStackTrace()
